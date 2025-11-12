@@ -1,0 +1,80 @@
+# Configuration for TIME-DOMAIN signal convolution experiment
+# 
+# This config trains a transformer to learn convolution in the time domain.
+# The model receives signals as time-domain vectors of length p=64.
+
+out_dir: ./outputs
+
+# Model architecture
+model:
+    family: gpt2
+    n_dims: 64          # Time domain: dimension = p
+    out_dim: 64         # Output same as input
+    n_positions: 101    # Max context length (number of (x,y) pairs)
+    n_embd: 256         # Embedding dimension
+    n_layer: 12         # Number of transformer layers
+    n_head: 4           # Number of attention heads
+
+# Training configuration
+training:
+    # Task: signal convolution
+    task: signal_conv
+    task_kwargs:
+        p: 64                    # Signal period
+        fir_len: 16              # FIR filter length
+        domain: time             # Time domain
+        fir_dist: normal         # Normal distribution for FIR coefficients
+        normalize_fir: true      # Normalize FIR to unit L1 norm
+        device: cuda
+    
+    # Data: signal generation
+    data: signal
+    data_kwargs:
+        p: 64                    # Signal period (must match task)
+        domain: time             # Time domain
+        amp_dist: normal         # Normal distribution for amplitudes
+        amp_std: 1.0             # Standard deviation for amplitudes
+        num_freqs: 32            # Number of frequency components (harmonics)
+        device: cuda
+    
+    # Training hyperparameters
+    batch_size: 64
+    learning_rate: 0.0001
+    train_steps: 500000
+    
+    # Checkpointing
+    save_every_steps: 1000       # Save training state every N steps
+    keep_every_steps: 100000     # Keep permanent model snapshots every N steps
+    
+    # Deterministic training pool (optional)
+    num_training_examples: 10000 # Fix pool of 10k examples for reproducibility
+    
+    # Loss function
+    loss_space: time             # Compute loss in time domain
+    
+    # Curriculum learning
+    curriculum:
+        # Context length curriculum: gradually increase from 5 to 41 examples
+        points:
+            start: 5             # Start with 5 in-context examples
+            end: 41              # End with 41 in-context examples
+            inc: 1               # Increment by 1
+            interval: 2000       # Every 2000 steps
+        
+        # Dimension curriculum: not used for signals (keep constant)
+        dims:
+            start: 64
+            end: 64
+            inc: 0
+            interval: 1
+
+# Weights & Biases logging
+wandb:
+    project: signal-incontext
+    entity: your-entity          # Change this to your W&B entity
+    name: time_p64_fir16
+    notes: "Time-domain transformer learning convolution with p=64, FIR length=16"
+    log_every_steps: 10
+
+# Quick test run flag
+test_run: false

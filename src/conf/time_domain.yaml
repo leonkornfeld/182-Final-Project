@@ -1,0 +1,32 @@
+# Time-domain signal convolution experiment
+# Inherits from base configuration
+
+inherit:
+    - base.yaml
+
+model:
+    n_dims: 64
+    out_dim: 64
+
+training:
+    task: signal_conv
+    task_kwargs:
+        p: 64
+        fir_len: 16
+        domain: time
+        fir_dist: normal
+        normalize_fir: true
+        device: cuda
+    
+    data: signal
+    data_kwargs:
+        p: 64
+        domain: time
+        amp_dist: normal
+        amp_std: 1.0
+        num_freqs: 32
+        device: cuda
+
+wandb:
+    name: time_p64_fir16
+    notes: "Time-domain transformer learning convolution"
