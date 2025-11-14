@@ -8,20 +8,21 @@ out_dir: ./outputs
 # Model architecture
 model:
     family: gpt2
-    n_dims: 64          # Time domain: dimension = p
-    out_dim: 64         # Output same as input
+    n_dims: 20          # Time domain: dimension = p
+    out_dim: 20         # Output same as input
     n_positions: 101    # Max context length (number of (x,y) pairs)
     n_embd: 256         # Embedding dimension
     n_layer: 12         # Number of transformer layers
-    n_head: 4           # Number of attention heads
+    n_head: 8           # Number of attention heads
+
 
 # Training configuration
 training:
     # Task: signal convolution
     task: signal_conv
     task_kwargs:
-        p: 64                    # Signal period
-        fir_len: 16              # FIR filter length
+        p: 20                    # Signal period
+        fir_len: 10              # FIR filter length
         domain: time             # Time domain
         fir_dist: normal         # Normal distribution for FIR coefficients
         normalize_fir: true      # Normalize FIR to unit L1 norm
@@ -30,11 +31,11 @@ training:
     # Data: signal generation
     data: signal
     data_kwargs:
-        p: 64                    # Signal period (must match task)
+        p: 20                    # Signal period (must match task)
         domain: time             # Time domain
         amp_dist: normal         # Normal distribution for amplitudes
         amp_std: 1.0             # Standard deviation for amplitudes
-        num_freqs: 32            # Number of frequency components (harmonics)
+        num_freqs: 20            # Number of frequency components (harmonics)
         device: cuda
     
     # Training hyperparameters
@@ -63,8 +64,8 @@ training:
         
         # Dimension curriculum: not used for signals (keep constant)
         dims:
-            start: 64
-            end: 64
+            start: 20
+            end: 20
             inc: 0
             interval: 1
 
@@ -73,7 +74,7 @@ wandb:
     project: signal-incontext
     entity: your-entity          # Change this to your W&B entity
     name: time_p64_fir16
-    notes: "Time-domain transformer learning convolution with p=64, FIR length=16"
+    notes: "Time-domain transformer learning convolution with p=20, FIR length=10"
     log_every_steps: 10
 
 # Quick test run flag
