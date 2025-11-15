@@ -12,20 +12,20 @@ out_dir: ./outputs
 # Model architecture
 model:
     family: gpt2
-    n_dims: 128         # Frequency domain: dimension = 2p (real + imag)
-    out_dim: 128        # Output same as input
+    n_dims: 40         # Frequency domain: dimension = 2p (real + imag)
+    out_dim: 40        # Output same as input
     n_positions: 101    # Max context length (number of (x,y) pairs)
     n_embd: 256         # Embedding dimension (same as time domain)
     n_layer: 12         # Number of transformer layers (same as time domain)
-    n_head: 4           # Number of attention heads (same as time domain)
+    n_head: 8          # Number of attention heads (same as time domain)
 
 # Training configuration
 training:
     # Task: signal convolution
     task: signal_conv
     task_kwargs:
-        p: 64                    # Signal period (same as time domain)
-        fir_len: 16              # FIR filter length (same as time domain)
+        p: 20                    # Signal period (same as time domain)
+        fir_len: 10              # FIR filter length (same as time domain)
         domain: freq             # Frequency domain
         fir_dist: normal         # Normal distribution for FIR coefficients
         normalize_fir: true      # Normalize FIR to unit L1 norm
@@ -38,7 +38,7 @@ training:
         domain: freq             # Frequency domain
         amp_dist: normal         # Normal distribution for amplitudes
         amp_std: 1.0             # Standard deviation for amplitudes
-        num_freqs: 32            # Number of frequency components (harmonics)
+        num_freqs: 20            # Number of frequency components (harmonics)
         device: cuda
     
     # Training hyperparameters (same as time domain for fair comparison)
@@ -54,7 +54,7 @@ training:
     num_training_examples: 10000 # Fix pool of 10k examples for reproducibility
     
     # Loss function
-    loss_space: time             # IMPORTANT: Evaluate in time domain for fair comparison!
+    loss_space: freq             # IMPORTANT: Evaluate in time domain for fair comparison!
     
     # Curriculum learning (same as time domain)
     curriculum:
@@ -67,17 +67,17 @@ training:
         
         # Dimension curriculum: not used for signals (keep constant)
         dims:
-            start: 128           # Note: 2p for frequency domain
-            end: 128
+            start: 40           # Note: 2p for frequency domain
+            end: 40
             inc: 0
             interval: 1
 
 # Weights & Biases logging
 wandb:
     project: signal-incontext
-    entity: your-entity          # Change this to your W&B entity
-    name: freq_p64_fir16
-    notes: "Frequency-domain transformer learning convolution with p=64, FIR length=16"
+    entity: leonkornfeld-uc-berkeley-electrical-engineering-computer         # Change this to your W&B entity
+    name: freq_p20_fir10
+    notes: "Frequency-domain transformer learning convolution with p=20, FIR length=10"
     log_every_steps: 10
 
 # Quick test run flag

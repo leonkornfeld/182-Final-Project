@@ -100,7 +100,7 @@ class SignalConvolutionTask(Task):
         fir_dist: str = "normal",      # "normal" | "uniform"
         normalize_fir: bool = True,
         seeds: Optional[Iterable[int]] = None,
-        device: str = "cpu",
+        device: str = "cuda",
     ):
         super().__init__(n_dims, batch_size, None, seeds)
         assert domain in ("time", "freq")

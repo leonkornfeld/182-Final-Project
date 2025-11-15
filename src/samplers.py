@@ -43,8 +43,8 @@ def fft_to_interleaved(z: torch.Tensor) -> torch.Tensor:
     out[:, 1::2] = im
     return out
 
-def make_gen(seed: int) -> torch.Generator:
-    g = torch.Generator()
+def make_gen(seed: int, device: str = "cuda") -> torch.Generator:
+    g = torch.Generator(device=device)
     g.manual_seed(int(seed) & 0xFFFFFFFF)
     return g
 
@@ -66,7 +66,7 @@ class SignalSampler(DataSampler):
         amp_std: float = 1.0,
         amp_max: float = 1.0,
         num_freqs: Optional[int] = None, # number of harmonics in inputs; None => p
-        device: str = "cpu",
+        device: str = "cuda",
     ):
         super().__init__(n_dims)
         assert domain in ("time", "freq")

@@ -72,8 +72,8 @@ training:
 # Weights & Biases logging
 wandb:
     project: signal-incontext
-    entity: your-entity          # Change this to your W&B entity
-    name: time_p64_fir16
+    entity: leonkornfeld-uc-berkeley-electrical-engineering-computer         # Change this to your W&B entity
+    name: time_p20_fir10
     notes: "Time-domain transformer learning convolution with p=20, FIR length=10"
     log_every_steps: 10
 
