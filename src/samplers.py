@@ -113,7 +113,7 @@ class SignalSampler(DataSampler):
         if self.domain == "time":
             return x_time
         # freq domain: interleave real/imag of FFT
-        X = torch.fft.fft(x_time, n=self.p, dim=-1)
+        X = torch.fft.fft(x_time, n=self.p, dim=-1, norm = 'ortho')
         return fft_to_interleaved(X)
 
     def sample_xs(
@@ -136,7 +136,7 @@ class SignalSampler(DataSampler):
 
         if seeds is None:
             # single global RNG; still deterministic if user set torch.manual_seed outside
-            g0 = make_gen(torch.seed())  # use current RNG state
+            g0 = make_gen(torch.seed(), self.device)  # use current RNG state
             for t in range(T):
                 x_time = self._sample_time_signal_batch(B, g0)  # (B,p)
                 xs_b[:, t, :] = self._encode(x_time)
@@ -146,8 +146,9 @@ class SignalSampler(DataSampler):
             for i, s in enumerate(seeds):
                 for t in range(T):
                     # each (i,t) gets its own substream
-                    gen = make_gen(int(s) * 1000003 + t)
+                    gen = make_gen(int(s) * 1000003 + t, self.device)
                     x_time = self._sample_time_signal_batch(1, gen)  # (1,p)
-                    xs_b[i, t, :] = self._encode(x_time.squeeze(0))
+                    x_enc = self._encode(x_time)                         # (1,p) or (1,2p)
+                    xs_b[i, t, :] = x_enc[0] 
 
         return xs_b

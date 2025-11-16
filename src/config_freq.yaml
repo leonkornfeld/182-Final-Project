@@ -1,7 +1,6 @@
 # Configuration for FREQUENCY-DOMAIN signal convolution experiment
 # 
 # This config trains a transformer to learn convolution in the frequency domain.
-# The model receives signals as frequency-domain vectors of length 2p=128
 # (interleaved real and imaginary parts).
 #
 # Hypothesis: Frequency-domain learning should be easier because convolution
@@ -12,8 +11,8 @@ out_dir: ./outputs
 # Model architecture
 model:
     family: gpt2
-    n_dims: 40         # Frequency domain: dimension = 2p (real + imag)
-    out_dim: 40        # Output same as input
+    n_dims: 100         # Frequency domain: dimension = 2p (real + imag)
+    out_dim: 100        # Output same as input
     n_positions: 101    # Max context length (number of (x,y) pairs)
     n_embd: 256         # Embedding dimension (same as time domain)
     n_layer: 12         # Number of transformer layers (same as time domain)
@@ -24,37 +23,35 @@ training:
     # Task: signal convolution
     task: signal_conv
     task_kwargs:
-        p: 20                    # Signal period (same as time domain)
-        fir_len: 10              # FIR filter length (same as time domain)
+        p: 50                    # Signal period (same as time domain)
+        fir_len: 50              # FIR filter length (same as time domain)
         domain: freq             # Frequency domain
-        fir_dist: normal         # Normal distribution for FIR coefficients
-        normalize_fir: true      # Normalize FIR to unit L1 norm
         device: cuda
     
     # Data: signal generation
     data: signal
     data_kwargs:
-        p: 64                    # Signal period (same as time domain)
+        p: 50                    # Signal period (same as time domain)
         domain: freq             # Frequency domain
         amp_dist: normal         # Normal distribution for amplitudes
         amp_std: 1.0             # Standard deviation for amplitudes
-        num_freqs: 20            # Number of frequency components (harmonics)
+        num_freqs: 50            # Number of frequency components (harmonics)
         device: cuda
     
     # Training hyperparameters (same as time domain for fair comparison)
     batch_size: 64
     learning_rate: 0.0001
-    train_steps: 500000
+    train_steps: 100001
     
     # Checkpointing
     save_every_steps: 1000       # Save training state every N steps
-    keep_every_steps: 100000     # Keep permanent model snapshots every N steps
+    keep_every_steps: 20000     # Keep permanent model snapshots every N steps
     
     # Deterministic training pool (same as time domain)
     num_training_examples: 10000 # Fix pool of 10k examples for reproducibility
     
     # Loss function
-    loss_space: freq             # IMPORTANT: Evaluate in time domain for fair comparison!
+    loss_space: freq            
     
     # Curriculum learning (same as time domain)
     curriculum:
@@ -67,8 +64,8 @@ training:
         
         # Dimension curriculum: not used for signals (keep constant)
         dims:
-            start: 40           # Note: 2p for frequency domain
-            end: 40
+            start: 100           # Note: 2p for frequency domain
+            end: 100
             inc: 0
             interval: 1
 
@@ -76,8 +73,8 @@ training:
 wandb:
     project: signal-incontext
     entity: leonkornfeld-uc-berkeley-electrical-engineering-computer         # Change this to your W&B entity
-    name: freq_p20_fir10
-    notes: "Frequency-domain transformer learning convolution with p=20, FIR length=10"
+    name: freq_p50_fir50
+    notes: "Frequency-domain transformer learning convolution with p=50, FIR length=50"
     log_every_steps: 10
 
 # Quick test run flag

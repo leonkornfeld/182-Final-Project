@@ -13,45 +13,17 @@ def squared_error(ys_pred, ys):
 def mean_squared_error(ys_pred, ys):
     return (ys - ys_pred).square().mean()
 
-
-
 class Task:
-    def __init__(self, n_dims, batch_size, pool_dict=None, seeds=None):
+    def __init__(self, n_dims, batch_size, seeds=None):
         self.n_dims = n_dims
         self.b_size = batch_size
-        self.pool_dict = pool_dict
         self.seeds = seeds
-        assert pool_dict is None or seeds is None
 
-    def evaluate(self, xs):
+
+def get_task_sampler(task_name: str, n_dims: int, bsize: int, **kwargs):
+    if task_name != "signal_conv":
         raise NotImplementedError
-
-    @staticmethod
-    def generate_pool_dict(n_dims, num_tasks):
-        raise NotImplementedError
-
-    @staticmethod
-    def get_metric():
-        raise NotImplementedError
-
-    @staticmethod
-    def get_training_metric():
-        raise NotImplementedError
-
-def get_task_sampler(
-    task_name: str,
-    n_dims: int,
-    bsize: int,
-    **kwargs,
-):
-    names_to_classes = {
-        "signal_conv": SignalConvolutionTask,
-    }
-    if task_name not in names_to_classes:
-        raise NotImplementedError(f"Unknown task: {task_name}")
-    cls = names_to_classes[task_name]
-    # Return a callable that instantiates a task (keeps parity with your original code)
-    return lambda **task_kwargs: cls(n_dims, bsize, **{**kwargs, **task_kwargs})
+    return lambda **task_kwargs: SignalConvolutionTask(n_dims, bsize, **{**kwargs, **task_kwargs})
 
 
 # ---------- Helpers ----------
@@ -81,14 +53,11 @@ def complex_to_interleaved(z: torch.Tensor) -> torch.Tensor:
 # ---------- The signal convolution task ----------
 class SignalConvolutionTask(Task):
     """
-    One task per batch row:
-      - Sample a single FIR h_i for row i (deterministically if seeds provided).
-      - For each prompt point t, compute y_{i,t} = (h_i ⊛ x_{i,t})_circ (length p).
-      - Return ys with SAME shape as xs.
-    Domain:
-      - time: xs, ys shapes (B, points, p)
-      - freq: xs, ys shapes (B, points, 2p) interleaved
+    Each batch row has its own random FIR filter h_i.
+    Model must infer h_i from input/output pairs (in-context learning).
+    Filters are Gaussian with variance scaled by 1/L.
     """
+
     def __init__(
         self,
         n_dims: int,
@@ -97,86 +66,79 @@ class SignalConvolutionTask(Task):
         p: int,
         fir_len: int,
         domain: Domain = "time",
-        fir_dist: str = "normal",      # "normal" | "uniform"
-        normalize_fir: bool = True,
         seeds: Optional[Iterable[int]] = None,
-        device: str = "cuda",
+        device = "cuda"
     ):
-        super().__init__(n_dims, batch_size, None, seeds)
+        super().__init__(n_dims, batch_size, seeds)
+
         assert domain in ("time", "freq")
-        self.p = int(p)
-        self.fir_len = int(fir_len)
+        self.p = p
+        self.fir_len = fir_len
         self.domain = domain
-        self.fir_dist = fir_dist
-        self.normalize_fir = normalize_fir
-        self.device = device
 
-        # Consistency check
+        # consistency check
         if domain == "time":
-            assert n_dims == self.p
+            assert n_dims == p
         else:
-            assert n_dims == 2 * self.p
+            assert n_dims == 2 * p
 
-        # Build FIRs deterministically if seeds are provided
-        self.h = self._sample_firs_deterministic(batch_size, seeds)
+        self.device = device
+        self.h = self._sample_firs(batch_size, seeds).to(self.device)
 
-    def _sample_firs_deterministic(self, B: int, seeds: Optional[Iterable[int]]) -> torch.Tensor:
+    def _sample_firs(self, B: int, seeds: Optional[Iterable[int]]):
+        """
+        Gaussian FIR:
+            h[n] ~ N(0, 1/L)
+        So:
+            E[||h||^2] ≈ 1
+        No L1 / L2 normalization.
+        """
+        L = self.fir_len
+        scale = 1.0 / math.sqrt(L)
+
         if seeds is None:
-            # Use current RNG state
-            if self.fir_dist == "uniform":
-                h = 2 * torch.rand(B, self.fir_len, device=self.device) - 1.0
-            else:
-                h = torch.randn(B, self.fir_len, device=self.device)
-        else:
-            seeds = list(seeds)
-            assert len(seeds) == B
-            rows = []
-            for s in seeds:
-                g = torch.Generator(device=self.device).manual_seed(int(s) + 1)  # +1 offset vs data seeds
-                if self.fir_dist == "uniform":
-                    rows.append(2 * torch.rand((1, self.fir_len), generator=g, device=self.device) - 1.0)
-                else:
-                    rows.append(torch.randn((1, self.fir_len), generator=g, device=self.device))
-            h = torch.cat(rows, dim=0)  # (B, L)
+            return torch.randn(B, L, device=self.device) * scale
 
-        if self.normalize_fir:
-            denom = h.abs().sum(dim=1, keepdim=True).clamp_min(1e-8)
-            h = h / denom
-        return h  # (B, L)
+        rows = []
+        for s in seeds:
+            g = torch.Generator(device=self.device).manual_seed(int(s) + 1)
+            rows.append(torch.randn((1, L), generator=g, device=self.device) * scale)
+
+        return torch.cat(rows, 0)
 
     @torch.no_grad()
     def evaluate(self, xs: torch.Tensor) -> torch.Tensor:
         """
         xs:
-          time: (B, points, p)
-          freq: (B, points, 2p) interleaved
-        Returns ys with the SAME shape as xs.
+            time → (B, T, p)
+            freq → (B, T, 2p) interleaved
+        return y with SAME shape.
         """
-        B, T, D = xs.shape
-        assert B == self.b_size, "Batch size mismatch."
+        B, T, _ = xs.shape
+        assert B == self.b_size
+
+        # print(self.h)
 
         if self.domain == "time":
-            # For each row, same h across points
-            xs_flat = xs.reshape(B * T, self.p)
-            # Convolve row-wise by grouping
-            # Strategy: FFT per row
-            X = torch.fft.fft(xs_flat, n=self.p, dim=-1).reshape(B, T, self.p)  # (B,T,p)
-            H = torch.fft.fft(self.h, n=self.p, dim=-1).unsqueeze(1)            # (B,1,p)
-            Y = torch.fft.ifft(X * H, dim=-1).real                               # (B,T,p)
+            xs_flat = xs.reshape(B * T, self.p).to(self.device)
+            # print(xs_flat)
+            X = torch.fft.fft(xs_flat, n=self.p, dim=-1).reshape(B, T, self.p)
+            H = torch.fft.fft(self.h, n=self.p, dim=-1).unsqueeze(1)
+            Y = torch.fft.ifft(X * H, dim=-1).real
             return Y
-        else:
-            # Decode interleaved X -> complex, convolve, then re-encode
-            p = self.p
-            re = xs[:, :, 0::2]
-            im = xs[:, :, 1::2]
-            X = torch.complex(re, im)                                           # (B,T,p)
-            H = torch.fft.fft(self.h, n=p, dim=-1).unsqueeze(1)                 # (B,1,p)
-            Y = X * H                                                            # (B,T,p) (still complex)
-            # Back to interleaved real/imag
-            Y_real = torch.empty(B, T, 2 * p, device=xs.device, dtype=re.dtype)
-            Y_real[:, :, 0::2] = Y.real
-            Y_real[:, :, 1::2] = Y.imag
-            return Y_real
+
+        else:  # frequency domain
+            re = xs[:, :, 0::2].to(self.device)
+            im = xs[:, :, 1::2].to(self.device)
+            X = torch.complex(re, im)
+
+            H = torch.fft.fft(self.h, n=self.p, dim=-1, norm = "ortho").unsqueeze(1)
+            Y = X * H
+
+            out = torch.empty(B, T, 2 * self.p, device=self.device, dtype=re.dtype)
+            out[:, :, 0::2] = Y.real
+            out[:, :, 1::2] = Y.imag
+            return out
 
     @staticmethod
     def get_metric():
