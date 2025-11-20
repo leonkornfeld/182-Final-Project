@@ -37,21 +37,21 @@ def _interleaved_to_complex(vec_2p: torch.Tensor) -> torch.Tensor:
     return torch.complex(re, im)
 
 
-def _to_time_domain(x: torch.Tensor, p: int, fft_norm: str = "ortho") -> torch.Tensor:
+def _to_time_domain(x: torch.Tensor, p: int) -> torch.Tensor:
     D = x.shape[-1]
     if D == p:
         return x
     elif D == 2 * p:
         Z = _interleaved_to_complex(x)
-        return torch.fft.ifft(Z, dim=-1, norm=fft_norm).real
+        return torch.fft.ifft(Z, dim=-1).real
     else:
         raise ValueError(f"Unexpected dimension {D}; expected p={p} or 2p={2*p}")
 
 
-def make_time_domain_mse(p: int, fft_norm: str = "ortho"):
+def make_time_domain_mse(p: int):
     def loss_fn(preds: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        preds_time = _to_time_domain(preds, p, fft_norm)
-        targets_time = _to_time_domain(targets, p, fft_norm)
+        preds_time = _to_time_domain(preds, p)
+        targets_time = _to_time_domain(targets, p)
         return F.mse_loss(preds_time, targets_time)
     return loss_fn
 
@@ -96,15 +96,6 @@ def compute_pointwise_losses(preds, targets, p, loss_space, cfg):
     return squared_errors.mean(dim=(0, 2)).cpu().numpy()
 
 
-def compute_baseline_loss(curriculum):
-    if curriculum.n_dims_truncated is None:
-        return 1.0
-    total = sum(
-        max(curriculum.n_dims_truncated - i, 0)
-        for i in range(curriculum.n_points)
-    )
-    return total / curriculum.n_points
-
 
 def get_signal_period(cfg):
     train = cfg["training"]
@@ -134,7 +125,6 @@ def train(model, cfg):
     cur_dict = train_cfg["curriculum"]
     from types import SimpleNamespace
     cur_args = SimpleNamespace(
-        dims=SimpleNamespace(**cur_dict["dims"]),
         points=SimpleNamespace(**cur_dict["points"]),
     )
     curriculum = Curriculum(cur_args)
@@ -176,23 +166,22 @@ def train(model, cfg):
     else:
         raise ValueError(f"loss_space must be 'time' or 'freq', got '{loss_space}'")
 
-    num_training_examples = train_cfg["num_training_examples"]
+    # num_training_examples = train_cfg["num_training_examples"]
     pbar = tqdm(range(starting_step, train_cfg["train_steps"]))
 
     for step in pbar:
         data_sampler_args = {}
         task_sampler_args = {}
 
-        if num_training_examples is not None:
-            assert num_training_examples >= batch_size
-            seeds = sample_deterministic_seeds(num_training_examples, batch_size)
-            data_sampler_args["seeds"] = seeds
-            task_sampler_args["seeds"] = [s + 1 for s in seeds]
+        # if num_training_examples is not None:
+        #     assert num_training_examples >= batch_size
+        #     seeds = sample_deterministic_seeds(num_training_examples, batch_size)
+        #     data_sampler_args["seeds"] = seeds
+        #     task_sampler_args["seeds"] = [s + 1 for s in seeds]
 
         xs = data_sampler.sample_xs(
             curriculum.n_points,
             batch_size,
-            curriculum.n_dims_truncated,
             **data_sampler_args,
         ).to(device)
 
@@ -204,14 +193,14 @@ def train(model, cfg):
         if step % cfg["wandb"]["log_every_steps"] == 0 and not cfg["test_run"]:
             with torch.no_grad():
                 pointwise_loss = compute_pointwise_losses(preds, ys, p, loss_space, cfg)
-                baseline_loss = compute_baseline_loss(curriculum)
+                # baseline_loss = compute_baseline_loss(curriculum)
                 wandb.log(
                     {
                         "overall_loss": loss,
-                        "excess_loss": loss / baseline_loss,
+                        # "excess_loss": loss / baseline_loss,
                         "pointwise/loss": dict(enumerate(pointwise_loss)),
                         "n_points": curriculum.n_points,
-                        "n_dims": curriculum.n_dims_truncated or n_dims,
+                        "n_dims": n_dims,
                     },
                     step=step,
                 )
@@ -268,7 +257,6 @@ def main():
         # Collapse curriculum for quick test
         cur = cfg["training"]["curriculum"]
         cur["points"]["start"] = cur["points"]["end"]
-        cur["dims"]["start"] = cur["dims"]["end"]
         cfg["training"]["train_steps"] = 100
 
     # Init wandb (skip if test_run)

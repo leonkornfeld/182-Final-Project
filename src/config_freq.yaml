@@ -11,8 +11,8 @@ out_dir: ./outputs
 # Model architecture
 model:
     family: gpt2
-    n_dims: 100         # Frequency domain: dimension = 2p (real + imag)
-    out_dim: 100        # Output same as input
+    n_dims: 40         # Frequency domain: dimension = 2p (real + imag)
+    out_dim: 40        # Output same as input
     n_positions: 101    # Max context length (number of (x,y) pairs)
     n_embd: 256         # Embedding dimension (same as time domain)
     n_layer: 12         # Number of transformer layers (same as time domain)
@@ -23,19 +23,19 @@ training:
     # Task: signal convolution
     task: signal_conv
     task_kwargs:
-        p: 50                    # Signal period (same as time domain)
-        fir_len: 50              # FIR filter length (same as time domain)
+        p: 20                    # Signal period (same as time domain)
+        fir_len: 20              # FIR filter length (same as time domain)
         domain: freq             # Frequency domain
         device: cuda
     
     # Data: signal generation
     data: signal
     data_kwargs:
-        p: 50                    # Signal period (same as time domain)
+        p: 20                    # Signal period (same as time domain)
         domain: freq             # Frequency domain
         amp_dist: normal         # Normal distribution for amplitudes
         amp_std: 1.0             # Standard deviation for amplitudes
-        num_freqs: 50            # Number of frequency components (harmonics)
+        num_freqs: 20            # Number of frequency components (harmonics)
         device: cuda
     
     # Training hyperparameters (same as time domain for fair comparison)
@@ -48,10 +48,10 @@ training:
     keep_every_steps: 20000     # Keep permanent model snapshots every N steps
     
     # Deterministic training pool (same as time domain)
-    num_training_examples: 10000 # Fix pool of 10k examples for reproducibility
+    num_training_examples: None # Fix pool of 10k examples for reproducibility
     
     # Loss function
-    loss_space: freq            
+    loss_space: time            
     
     # Curriculum learning (same as time domain)
     curriculum:
@@ -60,21 +60,14 @@ training:
             start: 5             # Start with 5 in-context examples
             end: 41              # End with 41 in-context examples
             inc: 1               # Increment by 1
-            interval: 2000       # Every 2000 steps
+            interval: 1000       # Every 2000 steps
         
-        # Dimension curriculum: not used for signals (keep constant)
-        dims:
-            start: 100           # Note: 2p for frequency domain
-            end: 100
-            inc: 0
-            interval: 1
-
 # Weights & Biases logging
 wandb:
     project: signal-incontext
     entity: leonkornfeld-uc-berkeley-electrical-engineering-computer         # Change this to your W&B entity
-    name: freq_p50_fir50
-    notes: "Frequency-domain transformer learning convolution with p=50, FIR length=50"
+    name: freq_p20_fir20_loss_space_time_1
+    notes: "Frequency-domain transformer learning convolution with p=20, FIR length=20"
     log_every_steps: 10
 
 # Quick test run flag

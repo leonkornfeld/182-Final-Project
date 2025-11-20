@@ -113,14 +113,13 @@ class SignalSampler(DataSampler):
         if self.domain == "time":
             return x_time
         # freq domain: interleave real/imag of FFT
-        X = torch.fft.fft(x_time, n=self.p, dim=-1, norm = 'ortho')
+        X = torch.fft.fft(x_time, n=self.p, dim=-1)
         return fft_to_interleaved(X)
 
     def sample_xs(
         self,
         n_points: int,
         b_size: int,
-        n_dims_truncated: Optional[int] = None,   # ignored for signals; kept for API compatibility
         seeds: Optional[Iterable[int]] = None,
     ) -> torch.Tensor:
         """
@@ -139,16 +138,23 @@ class SignalSampler(DataSampler):
             g0 = make_gen(torch.seed(), self.device)  # use current RNG state
             for t in range(T):
                 x_time = self._sample_time_signal_batch(B, g0)  # (B,p)
+                norms = x_time.norm(dim=1, keepdim=True) + 1e-8
+                x_time = x_time / norms
                 xs_b[:, t, :] = self._encode(x_time)
-        else:
-            seeds = list(seeds)
-            assert len(seeds) == B, f"len(seeds) must equal batch size ({B})."
-            for i, s in enumerate(seeds):
-                for t in range(T):
-                    # each (i,t) gets its own substream
-                    gen = make_gen(int(s) * 1000003 + t, self.device)
-                    x_time = self._sample_time_signal_batch(1, gen)  # (1,p)
-                    x_enc = self._encode(x_time)                         # (1,p) or (1,2p)
-                    xs_b[i, t, :] = x_enc[0] 
 
+        # norms = xs_b.norm(dim=2, keepdim=True) + 1e-8
+        # xs_normed = xs_b / norms
+        
         return xs_b
+    
+
+# else:
+        #     seeds = list(seeds)
+        #     assert len(seeds) == B, f"len(seeds) must equal batch size ({B})."
+        #     for i, s in enumerate(seeds):
+        #         for t in range(T):
+        #             # each (i,t) gets its own substream
+        #             gen = make_gen(int(s) * 1000003 + t, self.device)
+        #             x_time = self._sample_time_signal_batch(1, gen)  # (1,p)
+        #             x_enc = self._encode(x_time)                         # (1,p) or (1,2p)
+        #             xs_b[i, t, :] = x_enc[0] 

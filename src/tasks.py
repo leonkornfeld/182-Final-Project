@@ -84,27 +84,25 @@ class SignalConvolutionTask(Task):
 
         self.device = device
         self.h = self._sample_firs(batch_size, seeds).to(self.device)
+        
 
-    def _sample_firs(self, B: int, seeds: Optional[Iterable[int]]):
-        """
-        Gaussian FIR:
-            h[n] ~ N(0, 1/L)
-        So:
-            E[||h||^2] ≈ 1
-        No L1 / L2 normalization.
-        """
+    def _sample_firs(self, B, seeds):
         L = self.fir_len
-        scale = 1.0 / math.sqrt(L)
 
         if seeds is None:
-            return torch.randn(B, L, device=self.device) * scale
+            h = torch.randn(B, L, device=self.device)
+        else:
+            raise ValueError("This version of SignalConvolutionTask does not support seeds.")
+        # else:
+        #     rows = []
+        #     for s in seeds:
+        #         g = torch.Generator(device=self.device).manual_seed(int(s) + 1)
+        #         rows.append(torch.randn((1, L), generator=g, device=self.device))
+            # h = torch.cat(rows, 0)
 
-        rows = []
-        for s in seeds:
-            g = torch.Generator(device=self.device).manual_seed(int(s) + 1)
-            rows.append(torch.randn((1, L), generator=g, device=self.device) * scale)
-
-        return torch.cat(rows, 0)
+        # Normalize each FIR
+        h = h / (h.norm(dim=-1, keepdim=True) + 1e-8)
+        return h
 
     @torch.no_grad()
     def evaluate(self, xs: torch.Tensor) -> torch.Tensor:
@@ -132,7 +130,7 @@ class SignalConvolutionTask(Task):
             im = xs[:, :, 1::2].to(self.device)
             X = torch.complex(re, im)
 
-            H = torch.fft.fft(self.h, n=self.p, dim=-1, norm = "ortho").unsqueeze(1)
+            H = torch.fft.fft(self.h, n=self.p, dim=-1).unsqueeze(1)
             Y = X * H
 
             out = torch.empty(B, T, 2 * self.p, device=self.device, dtype=re.dtype)
@@ -147,3 +145,26 @@ class SignalConvolutionTask(Task):
     @staticmethod
     def get_training_metric():
         return mean_squared_error
+    
+
+
+   # def _sample_firs(self, B: int, seeds: Optional[Iterable[int]]):
+    #     """
+    #     Gaussian FIR:
+    #         h[n] ~ N(0, 1/L)
+    #     So:
+    #         E[||h||^2] ≈ 1
+    #     No L1 / L2 normalization.
+    #     """
+    #     L = self.fir_len
+    #     scale = 1.0 / math.sqrt(L)
+
+    #     if seeds is None:
+    #         return torch.randn(B, L, device=self.device) * scale
+
+    #     rows = []
+    #     for s in seeds:
+    #         g = torch.Generator(device=self.device).manual_seed(int(s) + 1)
+    #         rows.append(torch.randn((1, L), generator=g, device=self.device) * scale)
+
+    #     return torch.cat(rows, 0)
