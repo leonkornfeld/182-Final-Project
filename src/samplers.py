@@ -8,7 +8,6 @@ import torch
 
 Domain = Literal["time", "freq"]  # "time" => dim=p, "freq" => dim=2p
 
-
 class DataSampler:
     def __init__(self, n_dims: int):
         self.n_dims = n_dims
@@ -43,12 +42,6 @@ def fft_to_interleaved(z: torch.Tensor) -> torch.Tensor:
     out[:, 1::2] = im
     return out
 
-def make_gen(seed: int, device: str = "cuda") -> torch.Generator:
-    g = torch.Generator(device=device)
-    g.manual_seed(int(seed) & 0xFFFFFFFF)
-    return g
-
-
 class SignalSampler(DataSampler):
     """
     Produces x prompts as *full signals*:
@@ -71,6 +64,7 @@ class SignalSampler(DataSampler):
         super().__init__(n_dims)
         assert domain in ("time", "freq")
         self.p = int(p)
+        self.p_fft = self.p // 2 + 1     # rfft length
         self.domain = domain
         self.amp_dist = amp_dist
         self.amp_std = float(amp_std)
@@ -82,8 +76,10 @@ class SignalSampler(DataSampler):
         if domain == "time":
             assert n_dims == self.p, f"n_dims({n_dims}) must equal p({self.p}) for time domain."
         else:
-            assert n_dims == 2 * self.p, f"n_dims({n_dims}) must equal 2*p({2*self.p}) for freq domain."
-
+            # rfft → length p_fft, interleaved → 2 * p_fft
+            assert n_dims == 2 * self.p_fft, (
+                f"n_dims({n_dims}) must equal 2 * p_fft({2 * self.p_fft}) for freq domain."
+    )
         # Precompute frequency/time grids
         K = self.p if (self.num_freqs is None or self.num_freqs > self.p) else self.num_freqs
         self.K = K
@@ -91,16 +87,16 @@ class SignalSampler(DataSampler):
         self.omega = 2 * torch.pi * self.k_vals / self.p
         self.t = torch.arange(self.p, dtype=torch.float32, device=self.device).view(1, 1, self.p)
 
-    def _sample_time_signal_batch(self, B: int, gen: torch.Generator) -> torch.Tensor:
+    def _sample_time_signal_batch(self, B: int) -> torch.Tensor:
         """
         Returns x_batch in time domain: (B, p)
         """
-        phases = 2 * torch.pi * torch.rand((B, self.K, 1), generator=gen, device=self.device)  # (B,K,1)
+        phases = 2 * torch.pi * torch.rand((B, self.K, 1), device=self.device)  # (B,K,1)
 
         if self.amp_dist == "uniform":
-            amplitudes = (2 * self.amp_max) * torch.rand((B, self.K, 1), generator=gen, device=self.device) - self.amp_max
+            amplitudes = (2 * self.amp_max) * torch.rand((B, self.K, 1), device=self.device) - self.amp_max
         else:
-            amplitudes = self.amp_std * torch.randn((B, self.K, 1), generator=gen, device=self.device)
+            amplitudes = self.amp_std * torch.randn((B, self.K, 1), device=self.device)
 
         sines = torch.sin(self.omega * self.t + phases)             # (B,K,p) via broadcast
         x_time = (amplitudes * sines).sum(dim=1)                    # (B,p)
@@ -113,7 +109,7 @@ class SignalSampler(DataSampler):
         if self.domain == "time":
             return x_time
         # freq domain: interleave real/imag of FFT
-        X = torch.fft.fft(x_time, n=self.p, dim=-1)
+        X = torch.fft.rfft(x_time, n=self.p, dim=-1)
         return fft_to_interleaved(X)
 
     def sample_xs(
@@ -135,9 +131,9 @@ class SignalSampler(DataSampler):
 
         if seeds is None:
             # single global RNG; still deterministic if user set torch.manual_seed outside
-            g0 = make_gen(torch.seed(), self.device)  # use current RNG state
+            # g0 = make_gen(torch.seed(), self.device)  # use current RNG state
             for t in range(T):
-                x_time = self._sample_time_signal_batch(B, g0)  # (B,p)
+                x_time = self._sample_time_signal_batch(B)  # (B,p)
                 norms = x_time.norm(dim=1, keepdim=True) + 1e-8
                 x_time = x_time / norms
                 xs_b[:, t, :] = self._encode(x_time)
@@ -158,3 +154,9 @@ class SignalSampler(DataSampler):
         #             x_time = self._sample_time_signal_batch(1, gen)  # (1,p)
         #             x_enc = self._encode(x_time)                         # (1,p) or (1,2p)
         #             xs_b[i, t, :] = x_enc[0] 
+
+
+# def make_gen(seed: int, device: str = "cuda") -> torch.Generator:
+#     g = torch.Generator(device=device)
+#     g.manual_seed(int(seed) & 0xFFFFFFFF)
+#     return g

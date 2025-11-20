@@ -24,7 +24,7 @@ from curriculum import Curriculum
 
 torch.backends.cudnn.benchmark = True
 
-CONFIG_PATH = "src/config_freq.yaml"  # your YAML above, saved as config.yaml in this dir
+CONFIG_PATH = "src/config_time.yaml"  # your YAML above, saved as config.yaml in this dir
 
 
 # ============================================================================
@@ -39,13 +39,14 @@ def _interleaved_to_complex(vec_2p: torch.Tensor) -> torch.Tensor:
 
 def _to_time_domain(x: torch.Tensor, p: int) -> torch.Tensor:
     D = x.shape[-1]
+    p_fft = p // 2 + 1
     if D == p:
         return x
-    elif D == 2 * p:
+    elif D == 2 * p_fft:
         Z = _interleaved_to_complex(x)
-        return torch.fft.ifft(Z, dim=-1).real
+        return torch.fft.irfft(Z, dim=-1).real
     else:
-        raise ValueError(f"Unexpected dimension {D}; expected p={p} or 2p={2*p}")
+        raise ValueError(f"Unexpected dimension {D}; expected p={p} or 2*p_fft={2 * p_fft}")
 
 
 def make_time_domain_mse(p: int):
@@ -57,11 +58,16 @@ def make_time_domain_mse(p: int):
 
 
 def make_frequency_domain_mse(p: int):
+    p_fft = p // 2 + 1
+    expected_dim = 2 * p_fft
+
     def loss_fn(preds: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        expected_dim = 2 * p
         if preds.shape[-1] != expected_dim:
-            raise ValueError(f"Frequency MSE expects dim={expected_dim}, got {preds.shape[-1]}")
+            raise ValueError(
+                f"Frequency MSE expects dim={expected_dim}, got {preds.shape[-1]}"
+            )
         return F.mse_loss(preds, targets)
+
     return loss_fn
 
 

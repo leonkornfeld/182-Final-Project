@@ -73,6 +73,7 @@ class SignalConvolutionTask(Task):
 
         assert domain in ("time", "freq")
         self.p = p
+        self.p_fft = self.p // 2 + 1
         self.fir_len = fir_len
         self.domain = domain
 
@@ -80,8 +81,8 @@ class SignalConvolutionTask(Task):
         if domain == "time":
             assert n_dims == p
         else:
-            assert n_dims == 2 * p
-
+            assert n_dims == 2 * self.p_fft
+        
         self.device = device
         self.h = self._sample_firs(batch_size, seeds).to(self.device)
         
@@ -120,9 +121,9 @@ class SignalConvolutionTask(Task):
         if self.domain == "time":
             xs_flat = xs.reshape(B * T, self.p).to(self.device)
             # print(xs_flat)
-            X = torch.fft.fft(xs_flat, n=self.p, dim=-1).reshape(B, T, self.p)
-            H = torch.fft.fft(self.h, n=self.p, dim=-1).unsqueeze(1)
-            Y = torch.fft.ifft(X * H, dim=-1).real
+            X = torch.fft.rfft(xs_flat, n=self.p, dim=-1).reshape(B, T, self.p_fft)
+            H = torch.fft.rfft(self.h, n=self.p, dim=-1).unsqueeze(1)
+            Y = torch.fft.irfft(X * H, dim=-1).real
             return Y
 
         else:  # frequency domain
@@ -130,10 +131,10 @@ class SignalConvolutionTask(Task):
             im = xs[:, :, 1::2].to(self.device)
             X = torch.complex(re, im)
 
-            H = torch.fft.fft(self.h, n=self.p, dim=-1).unsqueeze(1)
+            H = torch.fft.rfft(self.h, n=self.p, dim=-1).unsqueeze(1)
             Y = X * H
 
-            out = torch.empty(B, T, 2 * self.p, device=self.device, dtype=re.dtype)
+            out = torch.empty(B, T, 2 * self.p_fft, device=self.device, dtype=re.dtype)
             out[:, :, 0::2] = Y.real
             out[:, :, 1::2] = Y.imag
             return out

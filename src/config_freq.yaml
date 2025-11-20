@@ -11,8 +11,8 @@ out_dir: ./outputs
 # Model architecture
 model:
     family: gpt2
-    n_dims: 40         # Frequency domain: dimension = 2p (real + imag)
-    out_dim: 40        # Output same as input
+    n_dims: 22         # Frequency domain: dimension = 2p (real + imag)
+    out_dim: 22        # Output same as input
     n_positions: 101    # Max context length (number of (x,y) pairs)
     n_embd: 256         # Embedding dimension (same as time domain)
     n_layer: 12         # Number of transformer layers (same as time domain)
@@ -66,7 +66,7 @@ training:
 wandb:
     project: signal-incontext
     entity: leonkornfeld-uc-berkeley-electrical-engineering-computer         # Change this to your W&B entity
-    name: freq_p20_fir20_loss_space_time_1
+    name: freq_p20_fir20_loss_space_time_no_norm_rfft
     notes: "Frequency-domain transformer learning convolution with p=20, FIR length=20"
     log_every_steps: 10
 

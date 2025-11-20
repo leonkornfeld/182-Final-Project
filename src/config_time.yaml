@@ -63,7 +63,7 @@ training:
 wandb:
     project: signal-incontext
     entity: leonkornfeld-uc-berkeley-electrical-engineering-computer         # Change this to your W&B entity
-    name: time_p20_fir20_normalized_infinite_set_2
+    name: time_p20_fir20_real_fft_norm
     notes: "Time-domain transformer learning convolution with p=20, FIR length=20"
     log_every_steps: 10
 
