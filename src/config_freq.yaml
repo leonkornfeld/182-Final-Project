@@ -66,7 +66,7 @@ training:
 wandb:
     project: signal-incontext
     entity: leonkornfeld-uc-berkeley-electrical-engineering-computer         # Change this to your W&B entity
-    name: freq_p20_fir20_loss_space_time_no_norm_rfft
+    name: freq_p20_fir20_loss_space_time_no_norm_rfft_ortho
     notes: "Frequency-domain transformer learning convolution with p=20, FIR length=20"
     log_every_steps: 10
 

@@ -27,16 +27,16 @@ def get_task_sampler(task_name: str, n_dims: int, bsize: int, **kwargs):
 
 
 # ---------- Helpers ----------
-def interleaved_to_complex(vec_2p: torch.Tensor) -> torch.Tensor:
-    """
-    vec_2p: (B, 2p) real, [Re0,Im0,Re1,Im1,...]
-    Returns: (B, p) complex
-    """
-    B, two_p = vec_2p.shape
-    p = two_p // 2
-    re = vec_2p[:, 0::2]
-    im = vec_2p[:, 1::2]
-    return torch.complex(re, im)
+# def interleaved_to_complex(vec_2p: torch.Tensor) -> torch.Tensor:
+#     """
+#     vec_2p: (B, 2p) real, [Re0,Im0,Re1,Im1,...]
+#     Returns: (B, p) complex
+#     """
+#     B, two_p = vec_2p.shape
+#     p = two_p // 2
+#     re = vec_2p[:, 0::2]
+#     im = vec_2p[:, 1::2]
+#     return torch.complex(re, im)
 
 
 def complex_to_interleaved(z: torch.Tensor) -> torch.Tensor:
@@ -102,7 +102,8 @@ class SignalConvolutionTask(Task):
             # h = torch.cat(rows, 0)
 
         # Normalize each FIR
-        h = h / (h.norm(dim=-1, keepdim=True) + 1e-8)
+        # h = h / (h.norm(dim=-1, keepdim=True) + 1e-8)
+        h = h / math.sqrt(L)
         return h
 
     @torch.no_grad()
@@ -121,9 +122,9 @@ class SignalConvolutionTask(Task):
         if self.domain == "time":
             xs_flat = xs.reshape(B * T, self.p).to(self.device)
             # print(xs_flat)
-            X = torch.fft.rfft(xs_flat, n=self.p, dim=-1).reshape(B, T, self.p_fft)
-            H = torch.fft.rfft(self.h, n=self.p, dim=-1).unsqueeze(1)
-            Y = torch.fft.irfft(X * H, dim=-1).real
+            X = torch.fft.rfft(xs_flat, n=self.p, dim=-1, norm = 'ortho').reshape(B, T, self.p_fft)
+            H = torch.fft.rfft(self.h, n=self.p, dim=-1, norm = 'ortho').unsqueeze(1)
+            Y = torch.fft.irfft(X * H, dim=-1, norm = 'ortho').real
             return Y
 
         else:  # frequency domain
@@ -131,7 +132,7 @@ class SignalConvolutionTask(Task):
             im = xs[:, :, 1::2].to(self.device)
             X = torch.complex(re, im)
 
-            H = torch.fft.rfft(self.h, n=self.p, dim=-1).unsqueeze(1)
+            H = torch.fft.rfft(self.h, n=self.p, dim=-1, norm = 'ortho').unsqueeze(1)
             Y = X * H
 
             out = torch.empty(B, T, 2 * self.p_fft, device=self.device, dtype=re.dtype)

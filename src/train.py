@@ -21,10 +21,19 @@ from models import build_model
 from samplers import get_data_sampler
 from tasks import get_task_sampler
 from curriculum import Curriculum
+from transformers import get_linear_schedule_with_warmup
 
 torch.backends.cudnn.benchmark = True
 
 CONFIG_PATH = "src/config_time.yaml"  # your YAML above, saved as config.yaml in this dir
+
+def get_grad_norm(model):
+    total_norm = 0.0
+    for p in model.parameters():
+        if p.grad is not None:
+            param_norm = p.grad.data.norm(2)
+            total_norm += param_norm.item() ** 2
+    return total_norm ** 0.5
 
 
 # ============================================================================
@@ -44,7 +53,7 @@ def _to_time_domain(x: torch.Tensor, p: int) -> torch.Tensor:
         return x
     elif D == 2 * p_fft:
         Z = _interleaved_to_complex(x)
-        return torch.fft.irfft(Z, dim=-1).real
+        return torch.fft.irfft(Z, dim=-1, norm = 'ortho').real
     else:
         raise ValueError(f"Unexpected dimension {D}; expected p={p} or 2*p_fft={2 * p_fft}")
 
@@ -81,6 +90,8 @@ def train_step(model, xs, ys, optimizer, loss_func):
     preds = model(xs, ys)
     loss = loss_func(preds, ys)
     loss.backward()
+    # current_norm = get_grad_norm(model)
+    # print(f"Gradient Size: {current_norm}")
     optimizer.step()
     return loss.detach().item(), preds.detach()
 
@@ -126,6 +137,16 @@ def train(model, cfg):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg["learning_rate"])
 
+    num_warmup_steps = train_cfg.get("warmup_steps", 2000)
+    total_steps = train_cfg["train_steps"]
+    
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, 
+        num_warmup_steps=num_warmup_steps, 
+        num_training_steps=total_steps
+    )
+    # ---------------------------------
+
     # Curriculum expects an object with .dims.start etc.
     # Build a tiny shim from the dict.
     cur_dict = train_cfg["curriculum"]
@@ -139,6 +160,7 @@ def train(model, cfg):
     starting_step = 0
     state_path = os.path.join(cfg["out_dir"], "state.pt")
     if os.path.exists(state_path):
+        print("STOPP")
         state = torch.load(state_path, map_location="cpu")
         model.load_state_dict(state["model_state_dict"])
         optimizer.load_state_dict(state["optimizer_state_dict"])
@@ -195,7 +217,7 @@ def train(model, cfg):
         ys = task.evaluate(xs).to(device)
 
         loss, preds = train_step(model, xs, ys, optimizer, loss_func)
-
+        scheduler.step()
         if step % cfg["wandb"]["log_every_steps"] == 0 and not cfg["test_run"]:
             with torch.no_grad():
                 pointwise_loss = compute_pointwise_losses(preds, ys, p, loss_space, cfg)
@@ -294,3 +316,8 @@ if __name__ == "__main__":
     main()
 
 
+
+# Usage inside training loop:
+# ... loss.backward()
+# current_norm = get_grad_norm(model)
+# print(f"Gradient Size: {current_norm}")
