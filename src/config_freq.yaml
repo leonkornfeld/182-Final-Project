@@ -24,7 +24,7 @@ training:
     task: signal_conv
     task_kwargs:
         p: 20                    # Signal period (same as time domain)
-        fir_len: 20              # FIR filter length (same as time domain)
+        fir_len: 20             # FIR filter length (same as time domain)
         domain: freq             # Frequency domain
         device: cuda
     
@@ -39,13 +39,13 @@ training:
         device: cuda
     
     # Training hyperparameters (same as time domain for fair comparison)
-    batch_size: 64
+    batch_size: 1024
     learning_rate: 0.0001
     train_steps: 100001
     
     # Checkpointing
     save_every_steps: 1000       # Save training state every N steps
-    keep_every_steps: 20000     # Keep permanent model snapshots every N steps
+    keep_every_steps: 40000     # Keep permanent model snapshots every N steps
     
     # Deterministic training pool (same as time domain)
     num_training_examples: None # Fix pool of 10k examples for reproducibility
@@ -60,13 +60,13 @@ training:
             start: 5             # Start with 5 in-context examples
             end: 41              # End with 41 in-context examples
             inc: 1               # Increment by 1
-            interval: 1000       # Every 2000 steps
+            interval: 2000       # Every 2000 steps
         
 # Weights & Biases logging
 wandb:
     project: signal-incontext
     entity: leonkornfeld-uc-berkeley-electrical-engineering-computer         # Change this to your W&B entity
-    name: freq_p20_fir20_loss_space_time_no_norm_rfft_ortho
+    name: freq_p20_fir20_loss_space_time_b256
     notes: "Frequency-domain transformer learning convolution with p=20, FIR length=20"
     log_every_steps: 10
 

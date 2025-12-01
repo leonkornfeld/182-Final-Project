@@ -25,7 +25,7 @@ from transformers import get_linear_schedule_with_warmup
 
 torch.backends.cudnn.benchmark = True
 
-CONFIG_PATH = "src/config_time.yaml"  # your YAML above, saved as config.yaml in this dir
+CONFIG_PATH = "src/config_freq.yaml"  # your YAML above, saved as config.yaml in this dir
 
 def get_grad_norm(model):
     total_norm = 0.0
