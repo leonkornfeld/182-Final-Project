@@ -1,7 +1,7 @@
 # Configuration for FREQUENCY-DOMAIN signal convolution experiment
 # 
 # This config trains a transformer to learn convolution in the frequency domain.
-# (interleaved real and imaginary parts).
+# Here we use an interleaved magnitude/phase representation in the frequency domain.
 #
 # Hypothesis: Frequency-domain learning should be easier because convolution
 # becomes element-wise multiplication (linear operation).
@@ -24,9 +24,10 @@ training:
     task: signal_conv
     task_kwargs:
         p: 20                    # Signal period (same as time domain)
-        fir_len: 20             # FIR filter length (same as time domain)
+        fir_len: 20              # FIR filter length (same as time domain)
         domain: freq             # Frequency domain
         device: cuda
+        freq_representation: complex   # use interleaved [|X_k|, arg(X_k)] instead of Re/Im
     
     # Data: signal generation
     data: signal
@@ -35,17 +36,18 @@ training:
         domain: freq             # Frequency domain
         amp_dist: normal         # Normal distribution for amplitudes
         amp_std: 1.0             # Standard deviation for amplitudes
-        num_freqs: 20            # Number of frequency components (harmonics)
+        num_freqs: 20           # Number of frequency components (harmonics)
         device: cuda
+        freq_representation: complex   # generate interleaved [|X_k|, arg(X_k)] inputs
     
     # Training hyperparameters (same as time domain for fair comparison)
-    batch_size: 1024
+    batch_size: 256
     learning_rate: 0.0001
     train_steps: 100001
     
     # Checkpointing
-    save_every_steps: 1000       # Save training state every N steps
-    keep_every_steps: 40000     # Keep permanent model snapshots every N steps
+    save_every_steps: 40000       # Save training state every N steps
+    keep_every_steps: 10000     # Keep permanent model snapshots every N steps
     
     # Deterministic training pool (same as time domain)
     num_training_examples: None # Fix pool of 10k examples for reproducibility
@@ -58,7 +60,7 @@ training:
         # Context length curriculum: gradually increase from 5 to 41 examples
         points:
             start: 5             # Start with 5 in-context examples
-            end: 41              # End with 41 in-context examples
+            end: 55              # End with 41 in-context examples
             inc: 1               # Increment by 1
             interval: 2000       # Every 2000 steps
         
@@ -66,8 +68,8 @@ training:
 wandb:
     project: signal-incontext
     entity: leonkornfeld-uc-berkeley-electrical-engineering-computer         # Change this to your W&B entity
-    name: freq_p20_fir20_loss_space_time_b256
-    notes: "Frequency-domain transformer learning convolution with p=20, FIR length=20"
+    name: freq_p20_fir20_loss_space_time_b256_dec4_1443
+    notes: "Frequency-domain transformer learning convolution with p=20, FIR length=20 complex"
     log_every_steps: 10
 
 # Quick test run flag

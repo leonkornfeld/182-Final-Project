@@ -46,22 +46,43 @@ def _interleaved_to_complex(vec_2p: torch.Tensor) -> torch.Tensor:
     return torch.complex(re, im)
 
 
-def _to_time_domain(x: torch.Tensor, p: int) -> torch.Tensor:
+def _magphase_to_complex(vec_2p: torch.Tensor) -> torch.Tensor:
+    """
+    Interpret the last dimension as interleaved [magnitude, phase] and
+    reconstruct a complex spectrum.
+    """
+    mag = vec_2p[..., 0::2]
+    phase = vec_2p[..., 1::2]
+    return torch.polar(mag, phase)
+
+
+def _to_time_domain(x: torch.Tensor, p: int, freq_representation: str = "complex") -> torch.Tensor:
+    """
+    Convert tensors that may live in time domain (dim=p) or frequency domain
+    (dim=2*p_fft) back to time domain.
+
+    freq_representation:
+        - \"complex\": interleaved Re/Im (default, backwards compatible)
+        - \"mag_phase\": interleaved magnitude/phase
+    """
     D = x.shape[-1]
     p_fft = p // 2 + 1
     if D == p:
         return x
     elif D == 2 * p_fft:
-        Z = _interleaved_to_complex(x)
-        return torch.fft.irfft(Z, dim=-1, norm = 'ortho').real
+        if freq_representation == "mag_phase":
+            Z = _magphase_to_complex(x)
+        else:
+            Z = _interleaved_to_complex(x)
+        return torch.fft.irfft(Z, n=p, dim=-1, norm="ortho").real
     else:
         raise ValueError(f"Unexpected dimension {D}; expected p={p} or 2*p_fft={2 * p_fft}")
 
 
-def make_time_domain_mse(p: int):
+def make_time_domain_mse(p: int, freq_representation: str = "complex"):
     def loss_fn(preds: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        preds_time = _to_time_domain(preds, p)
-        targets_time = _to_time_domain(targets, p)
+        preds_time = _to_time_domain(preds, p, freq_representation)
+        targets_time = _to_time_domain(targets, p, freq_representation)
         return F.mse_loss(preds_time, targets_time)
     return loss_fn
 
@@ -104,9 +125,13 @@ def sample_deterministic_seeds(pool_size: int, batch_size: int):
 
 
 def compute_pointwise_losses(preds, targets, p, loss_space, cfg):
+    train_cfg = cfg["training"]
+    task_kwargs = train_cfg.get("task_kwargs", {})
+    freq_representation = task_kwargs.get("freq_representation", "complex")
+
     if loss_space == "time":
-        preds_time = _to_time_domain(preds, p)
-        targets_time = _to_time_domain(targets, p)
+        preds_time = _to_time_domain(preds, p, freq_representation)
+        targets_time = _to_time_domain(targets, p, freq_representation)
         squared_errors = (preds_time - targets_time) ** 2
     else:
         squared_errors = (preds - targets) ** 2
@@ -187,8 +212,11 @@ def train(model, cfg):
     p = get_signal_period(cfg)
 
     loss_space = train_cfg.get("loss_space", "time")
+    task_kwargs = train_cfg.get("task_kwargs", {})
+    freq_representation = task_kwargs.get("freq_representation", "complex")
+
     if loss_space == "time":
-        loss_func = make_time_domain_mse(p)
+        loss_func = make_time_domain_mse(p, freq_representation)
     elif loss_space == "freq":
         loss_func = make_frequency_domain_mse(p)
     else:

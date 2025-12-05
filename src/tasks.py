@@ -6,12 +6,14 @@ from typing import Optional, Iterable, Literal
 
 Domain = Literal["time", "freq"]  # "time" or "freq"
 
+
 def squared_error(ys_pred, ys):
     return (ys - ys_pred).square()
 
 
 def mean_squared_error(ys_pred, ys):
     return (ys - ys_pred).square().mean()
+
 
 class Task:
     def __init__(self, n_dims, batch_size, seeds=None):
@@ -67,8 +69,20 @@ class SignalConvolutionTask(Task):
         fir_len: int,
         domain: Domain = "time",
         seeds: Optional[Iterable[int]] = None,
-        device = "cuda"
+        device: str = "cuda",
+        freq_representation: Literal["complex", "mag_phase"] = "complex",
     ):
+        """
+        Args:
+            n_dims: input/output dimensionality (p for time, 2*p_fft for freq)
+            batch_size: number of sequences in a batch
+            p: signal period
+            fir_len: FIR filter length
+            domain: \"time\" or \"freq\" (input/output domain)
+            freq_representation:
+                - \"complex\": frequency domain uses interleaved Re/Im (default, backwards compatible)
+                - \"mag_phase\": frequency domain uses interleaved magnitude/phase
+        """
         super().__init__(n_dims, batch_size, seeds)
 
         assert domain in ("time", "freq")
@@ -76,16 +90,16 @@ class SignalConvolutionTask(Task):
         self.p_fft = self.p // 2 + 1
         self.fir_len = fir_len
         self.domain = domain
+        self.freq_representation = freq_representation
 
         # consistency check
         if domain == "time":
             assert n_dims == p
         else:
             assert n_dims == 2 * self.p_fft
-        
+
         self.device = device
         self.h = self._sample_firs(batch_size, seeds).to(self.device)
-        
 
     def _sample_firs(self, B, seeds):
         L = self.fir_len
@@ -94,12 +108,6 @@ class SignalConvolutionTask(Task):
             h = torch.randn(B, L, device=self.device)
         else:
             raise ValueError("This version of SignalConvolutionTask does not support seeds.")
-        # else:
-        #     rows = []
-        #     for s in seeds:
-        #         g = torch.Generator(device=self.device).manual_seed(int(s) + 1)
-        #         rows.append(torch.randn((1, L), generator=g, device=self.device))
-            # h = torch.cat(rows, 0)
 
         # Normalize each FIR
         # h = h / (h.norm(dim=-1, keepdim=True) + 1e-8)
@@ -111,34 +119,55 @@ class SignalConvolutionTask(Task):
         """
         xs:
             time → (B, T, p)
-            freq → (B, T, 2p) interleaved
-        return y with SAME shape.
+            freq → (B, T, 2p_fft) interleaved
+
+        For frequency-domain tasks we support two output encodings:
+            - \"complex\": interleaved [Re0, Im0, Re1, Im1, ...]
+            - \"mag_phase\": interleaved [|Y0|, arg(Y0), |Y1|, arg(Y1), ...]
+
+        Returns:
+            y with the SAME shape as xs.
         """
         B, T, _ = xs.shape
         assert B == self.b_size
 
-        # print(self.h)
-
         if self.domain == "time":
             xs_flat = xs.reshape(B * T, self.p).to(self.device)
-            # print(xs_flat)
-            X = torch.fft.rfft(xs_flat, n=self.p, dim=-1, norm = 'ortho').reshape(B, T, self.p_fft)
-            H = torch.fft.rfft(self.h, n=self.p, dim=-1, norm = 'ortho').unsqueeze(1)
-            Y = torch.fft.irfft(X * H, dim=-1, norm = 'ortho').real
+            X = torch.fft.rfft(xs_flat, n=self.p, dim=-1, norm="ortho").reshape(B, T, self.p_fft)
+            H = torch.fft.rfft(self.h, n=self.p, dim=-1, norm="ortho").unsqueeze(1)
+            Y = torch.fft.irfft(X * H, dim=-1, norm="ortho").real
             return Y
 
-        else:  # frequency domain
-            re = xs[:, :, 0::2].to(self.device)
-            im = xs[:, :, 1::2].to(self.device)
-            X = torch.complex(re, im)
+        # frequency-domain case
+        if self.freq_representation == "mag_phase":
+            # Treat xs as interleaved [magnitude, phase] with phase in (-π, π]
+            x_mag = xs[:, :, 0::2].to(self.device)
+            x_phase = xs[:, :, 1::2].to(self.device)
 
-            H = torch.fft.rfft(self.h, n=self.p, dim=-1, norm = 'ortho').unsqueeze(1)
-            Y = X * H
+            H = torch.fft.rfft(self.h, n=self.p, dim=-1, norm="ortho").unsqueeze(1)
+            h_mag = torch.abs(H)
+            h_phase = torch.angle(H)  # natural range (-π, π]
 
-            out = torch.empty(B, T, 2 * self.p_fft, device=self.device, dtype=re.dtype)
-            out[:, :, 0::2] = Y.real
-            out[:, :, 1::2] = Y.imag
+            y_mag = x_mag * h_mag
+            y_phase = x_phase + h_phase
+
+            out = torch.empty(B, T, 2 * self.p_fft, device=self.device, dtype=x_mag.dtype)
+            out[:, :, 0::2] = y_mag
+            out[:, :, 1::2] = y_phase
             return out
+
+        # Default: complex interleaved representation (backwards compatible)
+        re = xs[:, :, 0::2].to(self.device)
+        im = xs[:, :, 1::2].to(self.device)
+        X = torch.complex(re, im)
+
+        H = torch.fft.rfft(self.h, n=self.p, dim=-1, norm="ortho").unsqueeze(1)
+        Y = X * H
+
+        out = torch.empty(B, T, 2 * self.p_fft, device=self.device, dtype=re.dtype)
+        out[:, :, 0::2] = Y.real
+        out[:, :, 1::2] = Y.imag
+        return out
 
     @staticmethod
     def get_metric():

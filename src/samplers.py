@@ -8,22 +8,28 @@ import torch
 
 Domain = Literal["time", "freq"]  # "time" => dim=p, "freq" => dim=2p
 
+
 class DataSampler:
     def __init__(self, n_dims: int):
         self.n_dims = n_dims
 
-    def sample_xs(self, n_points: int, b_size: int, n_dims_truncated: Optional[int] = None, seeds: Optional[Iterable[int]] = None):
+    def sample_xs(
+        self,
+        n_points: int,
+        b_size: int,
+        n_dims_truncated: Optional[int] = None,
+        seeds: Optional[Iterable[int]] = None,
+    ):
         raise NotImplementedError
 
 
 def get_data_sampler(data_name: str, n_dims: int, **kwargs):
     names_to_classes = {
-        "signal": SignalSampler,     # <- new
+        "signal": SignalSampler,  # <- new
     }
     if data_name not in names_to_classes:
         raise NotImplementedError(f"Unknown sampler: {data_name}")
     return names_to_classes[data_name](n_dims, **kwargs)
-
 
 
 def fft_to_interleaved(z: torch.Tensor) -> torch.Tensor:
@@ -42,35 +48,59 @@ def fft_to_interleaved(z: torch.Tensor) -> torch.Tensor:
     out[:, 1::2] = im
     return out
 
+
+def fft_to_magphase_interleaved(z: torch.Tensor) -> torch.Tensor:
+    """
+    z: (B, p) complex tensor from rfft.
+    Returns: (B, 2p) real tensor interleaving [|Z0|, arg(Z0), |Z1|, arg(Z1), ...]
+    with phase in the natural range (-π, π].
+    """
+    assert z.is_complex()
+    mag = torch.abs(z)
+    phase = torch.angle(z)
+
+    B, p = mag.shape
+    out = torch.empty(B, 2 * p, device=z.device, dtype=mag.dtype)
+    out[:, 0::2] = mag
+    out[:, 1::2] = phase
+    return out
+
+
 class SignalSampler(DataSampler):
     """
     Produces x prompts as *full signals*:
       - domain=="time":  xs shape (B, n_points, p)
-      - domain=="freq":  xs shape (B, n_points, 2p) with [Re0, Im0, Re1, Im1, ...]
+      - domain=="freq":  xs shape (B, n_points, 2p) with either:
+            * [Re0, Im0, Re1, Im1, ...]       if freq_representation == "complex"
+            * [|X0|, arg(X0), |X1|, arg(X1), ...] if freq_representation == "mag_phase"
+
     The *dimension passed in n_dims must match* p (time) or 2p (freq) in your config.
     """
+
     def __init__(
         self,
         n_dims: int,
         *,
-        p: int,                          # signal period
+        p: int,  # signal period
         domain: Domain = "time",
-        amp_dist: str = "normal",        # "normal" | "uniform"
+        amp_dist: str = "normal",  # "normal" | "uniform"
         amp_std: float = 1.0,
         amp_max: float = 1.0,
-        num_freqs: Optional[int] = None, # number of harmonics in inputs; None => p
+        num_freqs: Optional[int] = None,  # number of harmonics in inputs; None => p
         device: str = "cuda",
+        freq_representation: Literal["complex", "mag_phase"] = "complex",
     ):
         super().__init__(n_dims)
         assert domain in ("time", "freq")
         self.p = int(p)
-        self.p_fft = self.p // 2 + 1     # rfft length
+        self.p_fft = self.p // 2 + 1  # rfft length
         self.domain = domain
         self.amp_dist = amp_dist
         self.amp_std = float(amp_std)
         self.amp_max = float(amp_max)
         self.num_freqs = int(num_freqs) if (num_freqs is not None) else None
         self.device = device
+        self.freq_representation = freq_representation
 
         # Consistency check: n_dims must be p (time) or 2p (freq)
         if domain == "time":
@@ -79,7 +109,7 @@ class SignalSampler(DataSampler):
             # rfft → length p_fft, interleaved → 2 * p_fft
             assert n_dims == 2 * self.p_fft, (
                 f"n_dims({n_dims}) must equal 2 * p_fft({2 * self.p_fft}) for freq domain."
-    )
+            )
         # Precompute frequency/time grids
         K = self.p if (self.num_freqs is None or self.num_freqs > self.p) else self.num_freqs
         self.K = K
@@ -98,8 +128,8 @@ class SignalSampler(DataSampler):
         else:
             amplitudes = self.amp_std * torch.randn((B, self.K, 1), device=self.device)
 
-        sines = torch.sin(self.omega * self.t + phases)             # (B,K,p) via broadcast
-        x_time = (amplitudes * sines).sum(dim=1)                    # (B,p)
+        sines = torch.sin(self.omega * self.t + phases)  # (B,K,p) via broadcast
+        x_time = (amplitudes * sines).sum(dim=1)  # (B,p)
         return x_time
 
     def _encode(self, x_time: torch.Tensor) -> torch.Tensor:
@@ -108,8 +138,10 @@ class SignalSampler(DataSampler):
         """
         if self.domain == "time":
             return x_time
-        # freq domain: interleave real/imag of FFT
-        X = torch.fft.rfft(x_time, n=self.p, dim=-1, norm = 'ortho')
+        # freq domain: choose representation for FFT output
+        X = torch.fft.rfft(x_time, n=self.p, dim=-1, norm="ortho")
+        if self.freq_representation == "mag_phase":
+            return fft_to_magphase_interleaved(X)
         return fft_to_interleaved(X)
 
     def sample_xs(
