@@ -69,8 +69,8 @@ This config trains a transformer to learn convolution **directly in the time dom
 
 - **Model (`model`)**
   - **`family`**: `gpt2`
-  - **`n_dims`**: `30` (equal to the signal period \(p\))
-  - **`out_dim`**: `30` (matches `n_dims`)
+  - **`n_dims`**: `20` (equal to the signal period \(p\))
+  - **`out_dim`**: `20` (matches `n_dims`)
   - **`n_positions`**: `101` (max number of in-context (x, y) pairs)
   - **`n_embd`**: `256`
   - **`n_layer`**: `12`
@@ -79,16 +79,16 @@ This config trains a transformer to learn convolution **directly in the time dom
 - **Training (`training`)**
   - **Task (`training.task`, `training.task_kwargs`)**
     - **`task`**: `signal_conv`
-    - **`p`**: `30` (signal period / time-domain length)
+    - **`p`**: `20` (signal period / time-domain length)
     - **`fir_len`**: `20` (FIR filter length)
     - **`domain`**: `time`
   - **Data (`training.data`, `training.data_kwargs`)**
     - **`data`**: `signal`
-    - **`p`**: `30` (must match task)
+    - **`p`**: `20` (must match task)
     - **`domain`**: `time`
     - **`amp_dist`**: `normal`
     - **`amp_std`**: `1.0`
-    - **`num_freqs`**: `30` (number of harmonics in the random Fourier series)
+    - **`num_freqs`**: `20` (number of harmonics in the random Fourier series)
     - **`device`**: `cuda`
   - **Hyperparameters**
     - **`batch_size`**: `512`
@@ -108,8 +108,8 @@ This config trains a transformer to learn convolution **directly in the time dom
 - **Weights & Biases (`wandb`)**
   - **`project`**: `signal-incontext`
   - **`entity`**: ``
-  - **`name`**: `time_p30_fir20_b512_dec14_1530`
-  - **`notes`**: `Time-domain transformer learning convolution with p=30, FIR length=20`
+  - **`name`**: `time_p20_fir20_b512_dec14_1530`
+  - **`notes`**: `Time-domain transformer learning convolution with p=20, FIR length=20`
   - **`log_every_steps`**: `10`
 
 ---
@@ -123,9 +123,9 @@ This config trains a transformer to learn convolution **in the frequency domain*
 
 - **Model (`model`)**
   - **`family`**: `gpt2`
-  - **`n_dims`**: `32`  
-    - For `p = 30`, the real FFT has \(p/2 + 1 = 16\) frequency bins, and the model uses **interleaved real and imaginary parts**, so \(2 \times 16 = 32\).
-  - **`out_dim`**: `32`
+  - **`n_dims`**: `22`  
+    - For `p = 20`, the real FFT has \(p/2 + 1 = 16\) frequency bins, and the model uses **interleaved real and imaginary parts**, so \(2 \times 16 = 32\).
+  - **`out_dim`**: `22`
   - **`n_positions`**: `101`
   - **`n_embd`**: `256`
   - **`n_layer`**: `12`
@@ -134,18 +134,18 @@ This config trains a transformer to learn convolution **in the frequency domain*
 - **Training (`training`)**
   - **Task (`training.task`, `training.task_kwargs`)**
     - **`task`**: `signal_conv`
-    - **`p`**: `30` (signal period)
+    - **`p`**: `20` (signal period)
     - **`fir_len`**: `5` (FIR filter length)
     - **`domain`**: `freq`
     - **`device`**: `cuda`
     - **`freq_representation`**: `complex` (interleaved real/imaginary encoding)
   - **Data (`training.data`, `training.data_kwargs`)**
     - **`data`**: `signal`
-    - **`p`**: `30`
+    - **`p`**: `20`
     - **`domain`**: `freq`
     - **`amp_dist`**: `normal`
     - **`amp_std`**: `1.0`
-    - **`num_freqs`**: `30`
+    - **`num_freqs`**: `20`
     - **`device`**: `cuda`
     - **`freq_representation`**: `complex`
   - **Hyperparameters**
@@ -166,8 +166,8 @@ This config trains a transformer to learn convolution **in the frequency domain*
 - **Weights & Biases (`wandb`)**
   - **`project`**: `signal-incontext`
   - **`entity`**: `leonkornfeld-uc-berkeley-electrical-engineering-computer`
-  - **`name`**: `freq_p30_fir5_b512_dec14_19:17`
-  - **`notes`**: `Frequency-domain transformer learning convolution with p=30, FIR length=5`
+  - **`name`**: `freq_p20_fir5_b512_dec14_19:17`
+  - **`notes`**: `Frequency-domain transformer learning convolution with p=20, FIR length=5`
   - **`log_every_steps`**: `10`
 
 ---
