@@ -8,12 +8,12 @@ out_dir: ./outputs
 # Model architecture
 model:
     family: gpt2
-    n_dims: 20        # Time domain: dimension = p
-    out_dim: 20         # Output same as input
+    n_dims: 30         # Frequency domain: dimension = 2p (real + imag)
+    out_dim: 30        # Output same as input
     n_positions: 101    # Max context length (number of (x,y) pairs)
-    n_embd: 256         # Embedding dimension
-    n_layer: 12         # Number of transformer layers
-    n_head: 8           # Number of attention heads
+    n_embd: 256         # Embedding dimension (same as time domain)
+    n_layer: 12         # Number of transformer layers (same as time domain)
+    n_head: 8          # Number of attention heads (same as time domain)
 
 
 # Training configuration
@@ -21,24 +21,24 @@ training:
     # Task: signal convolution
     task: signal_conv
     task_kwargs:
-        p: 20                # Signal period
-        fir_len: 5              # FIR filter length
+        p: 30                # Signal period
+        fir_len: 20             # FIR filter length
         domain: time             # Time domain
     
     # Data: signal generation
     data: signal
     data_kwargs:
-        p: 20                    # Signal period (must match task)
+        p: 30                    # Signal period (must match task)
         domain: time             # Time domain
         amp_dist: normal         # Normal distribution for amplitudes
         amp_std: 1.0             # Standard deviation for amplitudes
-        num_freqs: 20            # Number of frequency components (harmonics)
+        num_freqs: 30            # Number of frequency components (harmonics)
         device: cuda
     
     # Training hyperparameters
-    batch_size: 256
-    learning_rate: 0.0001
-    train_steps: 100001
+    batch_size: 512
+    learning_rate: .0001
+    train_steps: 150001
     
     # Checkpointing
     save_every_steps: 1000       # Save training state every N steps
@@ -63,8 +63,8 @@ training:
 wandb:
     project: signal-incontext
     entity: leonkornfeld-uc-berkeley-electrical-engineering-computer         # Change this to your W&B entity
-    name: time_p20_fir5_context_batch256_dec4_1229
-    notes: "Time-domain transformer learning convolution with p=20, FIR length=5, batch256"
+    name: time_p30_fir20_b512_dec14_1530
+    notes: "Time-domain transformer learning convolution with p=30, FIR length=20"
     log_every_steps: 10
 
 # Quick test run flag
