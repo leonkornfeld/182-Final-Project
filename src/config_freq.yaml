@@ -3,28 +3,19 @@
 # This config trains a transformer to learn convolution in the frequency domain.
 # Here we use an interleaved magnitude/phase representation in the frequency domain.
 #
-# Hypothesis: Frequency-domain learning should be easier because convolution
-# becomes element-wise multiplication (linear operation).
 
 out_dir: ./outputs
 
 # Model architecture
 model:
     family: gpt2
-    n_dims: 32         # Frequency domain: dimension = 2p (real + imag)
+    n_dims: 32         # Frequency domain: dimension = 2(p/2 +1)
     out_dim: 32        # Output same as input
     n_positions: 101    # Max context length (number of (x,y) pairs)
     n_embd: 256         # Embedding dimension (same as time domain)
     n_layer: 12         # Number of transformer layers (same as time domain)
     n_head: 8          # Number of attention heads (same as time domain)
-# model:
-#     family: gpt2
-#     n_dims: 32        # Time domain: dimension = p
-#     out_dim: 32         # Output same as input
-#     n_positions: 101    # Max context length (number of (x,y) pairs)
-#     n_embd: 64         # Embedding dimension
-#     n_layer: 4         # Number of transformer layers
-#     n_head: 4           # Number of attention heads
+
 
 # Training configuration
 training:
@@ -32,10 +23,10 @@ training:
     task: signal_conv
     task_kwargs:
         p: 30                    # Signal period (same as time domain)
-        fir_len: 20              # FIR filter length (same as time domain)
+        fir_len: 5              # FIR filter length (same as time domain)
         domain: freq             # Frequency domain
         device: cuda
-        freq_representation: complex   # use interleaved [|X_k|, arg(X_k)] instead of Re/Im
+        freq_representation: complex   #we experimented with mag_phase representation, but it did not work as well. Keep as is
     
     # Data: signal generation
     data: signal
@@ -46,7 +37,7 @@ training:
         amp_std: 1.0             # Standard deviation for amplitudes
         num_freqs: 30           # Number of frequency components (harmonics)
         device: cuda
-        freq_representation: complex   # generate interleaved [|X_k|, arg(X_k)] inputs
+        freq_representation: complex   
     
     # Training hyperparameters (same as time domain for fair comparison)
     batch_size: 512
@@ -57,8 +48,7 @@ training:
     save_every_steps: 40000       # Save training state every N steps
     keep_every_steps: 10000     # Keep permanent model snapshots every N steps
     
-    # Deterministic training pool (same as time domain)
-    num_training_examples: None # Fix pool of 10k examples for reproducibility
+    num_training_examples: None # This is legacy from when we had a fixed training pool. We now use all the data.
     
     # Loss function
     loss_space: time            
@@ -68,7 +58,7 @@ training:
         # Context length curriculum: gradually increase from 5 to 41 examples
         points:
             start: 5             # Start with 5 in-context examples
-            end: 55              # End with 41 in-context examples
+            end: 55              # End with 55 in-context examples
             inc: 1               # Increment by 1
             interval: 2000       # Every 2000 steps
         
@@ -76,9 +66,11 @@ training:
 wandb:
     project: signal-incontext
     entity: leonkornfeld-uc-berkeley-electrical-engineering-computer         # Change this to your W&B entity
-    name: freq_p30_fir5_b512_dec14_18:54
+    name: freq_p30_fir5_b512_dec14_19:17
     notes: "Frequency-domain transformer learning convolution with p=30, FIR length=5"
     log_every_steps: 10
 
+
+#This was never used
 # Quick test run flag
 test_run: false

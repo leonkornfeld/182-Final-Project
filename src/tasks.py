@@ -27,19 +27,7 @@ def get_task_sampler(task_name: str, n_dims: int, bsize: int, **kwargs):
         raise NotImplementedError
     return lambda **task_kwargs: SignalConvolutionTask(n_dims, bsize, **{**kwargs, **task_kwargs})
 
-
 # ---------- Helpers ----------
-# def interleaved_to_complex(vec_2p: torch.Tensor) -> torch.Tensor:
-#     """
-#     vec_2p: (B, 2p) real, [Re0,Im0,Re1,Im1,...]
-#     Returns: (B, p) complex
-#     """
-#     B, two_p = vec_2p.shape
-#     p = two_p // 2
-#     re = vec_2p[:, 0::2]
-#     im = vec_2p[:, 1::2]
-#     return torch.complex(re, im)
-
 
 def complex_to_interleaved(z: torch.Tensor) -> torch.Tensor:
     """
@@ -138,7 +126,7 @@ class SignalConvolutionTask(Task):
             Y = torch.fft.irfft(X * H, dim=-1, norm="ortho").real
             return Y
 
-        # frequency-domain case
+        # frequency-domain case. This code is not tested and will lead to model divergence
         if self.freq_representation == "mag_phase":
             # Treat xs as interleaved [magnitude, phase] with phase in (-π, π]
             x_mag = xs[:, :, 0::2].to(self.device)
@@ -177,25 +165,3 @@ class SignalConvolutionTask(Task):
     def get_training_metric():
         return mean_squared_error
     
-
-
-   # def _sample_firs(self, B: int, seeds: Optional[Iterable[int]]):
-    #     """
-    #     Gaussian FIR:
-    #         h[n] ~ N(0, 1/L)
-    #     So:
-    #         E[||h||^2] ≈ 1
-    #     No L1 / L2 normalization.
-    #     """
-    #     L = self.fir_len
-    #     scale = 1.0 / math.sqrt(L)
-
-    #     if seeds is None:
-    #         return torch.randn(B, L, device=self.device) * scale
-
-    #     rows = []
-    #     for s in seeds:
-    #         g = torch.Generator(device=self.device).manual_seed(int(s) + 1)
-    #         rows.append(torch.randn((1, L), generator=g, device=self.device) * scale)
-
-    #     return torch.cat(rows, 0)
