@@ -1,5 +1,5 @@
 ## Project Overview
-
+This repository is forked from https://github.com/dtsip/in-context-learning
 This project trains GPT-style transformers to perform **circular convolution** on periodic signals from in-context examples, and compares **time-domain** vs **frequency-domain** parameterizations.
 
 - **Time-domain experiment**: inputs and outputs are length-\(p\) real signals.
